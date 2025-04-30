@@ -7,6 +7,7 @@ const { UserModel, validateUser, validateLogin , validateUpdate } = require("./m
 // function for registering
 exports.register = async function (req, res) {
     try {
+        const {name , email , password , age , role} = req.body;
       // التحقق من البيانات باستخدام Joi
       const { error } = validateUser(req.body);
       if (error) {
@@ -18,14 +19,21 @@ exports.register = async function (req, res) {
       if (existingUser) {
         return res.status(400).json({ message: "Email already exists" });
       }
+
+      if(role && role === "admin"){
+        return res.status(400).json({message : "You cannot register as an admin"});
+      }
   
       // تشفير كلمة المرور
       const hashedPassword = await bcrypt.hash(req.body.password, 10);
-  
+      
       // إعداد بيانات المستخدم الجديد
       const newUser = new UserModel({
-        ...req.body,
+        name,
+        email,
+        age,
         password: hashedPassword,
+        role : "user"
       });
   
       // حفظ المستخدم الجديد في قاعدة البيانات
@@ -34,7 +42,7 @@ exports.register = async function (req, res) {
       // استجابة ناجحة بعد التسجيل
       return res.status(201).json({
         message: 'User registered successfully',
-        USER: { id: newUser._id, email: newUser.email, name: newUser.name },
+        USER: { id: newUser._id, email: newUser.email, name: newUser.name , role:newUser.role},
       });
     } catch (err) {
       console.log(err);
@@ -52,7 +60,7 @@ exports.login = async (req, res) => {
     try {
         // التحقق من البيانات باستخدام Joi
         const { error } = validateLogin(req.body);
-if (error) {
+        if (error) {
   return res.status(400).json({ error: error.details[0].message });
 }
 
@@ -63,7 +71,12 @@ if (error) {
         const user = await UserModel.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ message: "User is not found, please go to SIGN UP page to register " , link: req.protocol + "://" + req.get("host") + "/api/users/getusers" });
+            return res.status(404).json({
+                error: "User is not found",
+                suggestion: "Please register first",
+                signUpLink: `${req.protocol}://${req.get("host")}/signup`
+              });
+              
         }
 
         // التحقق من كلمة المرور (حسب التشفير المستخدم)
@@ -76,7 +89,8 @@ if (error) {
         const token = jwt.sign(
             { email: user.email, id: user._id, role: user.role },
             process.env.secretKey,
-            { expiresIn: '2d' } // مدة صلاحية التوكن (يمكنك تعديلها حسب احتياجاتك)
+            { expiresIn: '2d' }
+             // مدة صلاحية التوكن (يمكنك تعديلها حسب احتياجاتك)
         );
 
         return res.status(200).json({
@@ -85,7 +99,7 @@ if (error) {
                 id: user._id,
                 email: user.email,
                 name: user.name,
-                jwt: token
+                token: token
             }
         });
 
@@ -119,7 +133,7 @@ exports.getUsers = async function (req , res) {
 
     }catch(err){
         console.log(err);
-        res.status(400).send({message : err})
+        res.status(500).send({message : err})
     }
 }
 
@@ -141,14 +155,14 @@ exports.delete = async function (req, res) {
 
         if (!isAdmin && !isSelf) {
             return res.status(403).json({
-                message: "Unauthorized. Only admins or the user themself can delete this account."
-            });
+                message: "Unauthorized. You can only delete your own account or be an admin to delete others."
+              });              
         }
 
         // التأكد من وجود المستخدم
         const user = await UserModel.findById(id);
         if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            return res.status(404).json({ message: "User is not found" });
         }
 
         // حذف المستخدم
@@ -156,8 +170,9 @@ exports.delete = async function (req, res) {
        
         res.json({
             message: "User has been deleted successfully",
-            data: []
-        });
+            data: { id: user._id, name: user.name, email: user.email }
+          });
+          
 
     } catch (err) {
         console.error(err);
@@ -183,22 +198,28 @@ exports.update = async function (req, res) {
             if (error) {
                 return res.status(400).json({ error: error.details[0].message });
 }
-
+// التحقق من الشخص هو نفسه الذي يقوم بتعديل البيانات
+        const isSelfUpdate = req.user.userId === userId;
+        if (!isSelfUpdate && req.user.userRole !== 'admin') {
+            return res.status(403).json({ error: "You are not authorized to update other users' information." });
+        }
 
         // التحقق من تكرار الإيميل لو اتبعت
         const { email, password , role} = req.body;
-
-        if (role && req.user.userRole !== "admin" && req.body.role === "admin") {
-            return res.status(403).json({ error: "Only admins can update roles." });
-          }
-
-
+        
         if (email) {
             const existingUser = await UserModel.findOne({ email });
             if (existingUser && existingUser._id.toString() !== userId) {
                 return res.status(400).json({ error: "Email already exists, please choose another email." });
             }
         }
+
+        if (role && req.user.userRole !== "admin" && req.body.role === "admin") {
+            return res.status(403).json({ error: "Only admins can update roles." });
+          }
+
+
+    
 
         let newData = { ...req.body };
 
@@ -211,7 +232,7 @@ exports.update = async function (req, res) {
         const updatedUser = await UserModel.findByIdAndUpdate(userId, newData, { new: true });
 
         if (!updatedUser) {
-            return res.status(404).json({ message: "User is not found" });
+            return res.status(404).json({ message: `User with id ${userId} not found` });
         }
 
         res.json({ message: "User updated successfully", data: updatedUser });
