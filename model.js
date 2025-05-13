@@ -7,7 +7,12 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum : ['user' , 'admin'] , default: "user" },
-  age: { type: Number, min: 10, required: true }
+  age: { type: Number, min: 10, required: true },
+  isVerified: { type: Boolean, default: false },
+  verificationToken: { type: String, default: null },
+  verificationTokenExpires: { type: Date, default: null },
+  verificationEmailSentCount: { type: Number, default: 0 },
+  lastVerificationReset: { type: Date, default: Date.now },
 });
 
 // إنشاء Mongoose Model

@@ -1,16 +1,13 @@
 const router = require("express").Router();
 const UserController = require("./controller");
-const authentication = require("./auth")
+const authentication = require("./auth");
 
-
-
-router.post('/api/users/register', UserController.register)
-router.post('/api/users/login', UserController.login)
-router.get('/api/users/getusers',authentication, UserController.getUsers)
-router.put('/api/users/update/:id',authentication, UserController.update)
-router.delete('/api/users/delete/:id',authentication, UserController.delete)
-
-
-
+// الآن كله تحت /api/users
+router.post('/register', UserController.register);
+router.get('/verify-email/:userId/:token', UserController.verifyEmail);
+router.post('/login', UserController.login);
+router.get('/getusers', authentication, UserController.getUsers);
+router.put('/update/:id', authentication, UserController.update);
+router.delete('/delete/:id', authentication, UserController.delete);
 
 module.exports = router;
